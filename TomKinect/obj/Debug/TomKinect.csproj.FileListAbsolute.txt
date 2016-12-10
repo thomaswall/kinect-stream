@@ -95,3 +95,6 @@ C:\Users\Christopher\dev\kinect-stream\TomKinect\bin\Debug\Microsoft.Kinect.Tool
 C:\Users\Christopher\dev\kinect-stream\TomKinect\bin\Debug\Microsoft.Kinect.Tools.xml
 C:\Users\Christopher\dev\kinect-stream\TomKinect\bin\Debug\websocket-sharp.dll
 C:\Users\Christopher\dev\kinect-stream\TomKinect\bin\Debug\websocket-sharp.xml
+C:\Users\Christopher\dev\kinect-stream\TomKinect\bin\Debug\WriteableBitmapEx.Wpf.dll
+C:\Users\Christopher\dev\kinect-stream\TomKinect\bin\Debug\WriteableBitmapEx.Wpf.pdb
+C:\Users\Christopher\dev\kinect-stream\TomKinect\bin\Debug\WriteableBitmapEx.Wpf.xml

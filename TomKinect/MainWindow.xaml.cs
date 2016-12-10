@@ -19,6 +19,7 @@ using System.Net.Sockets;
 
 using WebSocketSharp;
 using System.Diagnostics;
+using System.Collections;
 
 namespace TomKinect
 {
@@ -29,6 +30,7 @@ namespace TomKinect
         KinectSensor sensor = null;
         private WriteableBitmap bitmap;
         byte[] biFrameData;
+        ArrayList indexes;
         Stopwatch sw;
              
         public MainWindow()
@@ -52,12 +54,12 @@ namespace TomKinect
 
             try
             {
-                var ws = new WebSocket("ws://192.168.0.9:1337");
-                ws.OnMessage += Ws_OnMessage;
-                ws.OnOpen += (sender, e) => Console.WriteLine("opened!!!!");
-                ws.OnError += (sender, e) => Console.WriteLine(e.Exception);
-                ws.OnClose += (sender, e) => Console.WriteLine("CLOSED");
-                ws.Connect();
+                //var ws = new WebSocket("ws://192.168.0.9:1337");
+                //ws.OnMessage += Ws_OnMessage;
+                //ws.OnOpen += (sender, e) => Console.WriteLine("opened!!!!");
+                //ws.OnError += (sender, e) => Console.WriteLine(e.Exception);
+                //ws.OnClose += (sender, e) => Console.WriteLine("CLOSED");
+                //ws.Connect();
             }
             catch (Exception e)
             {
@@ -164,14 +166,19 @@ namespace TomKinect
             //throw new NotImplementedException();
         }
 
-        private void DepthReader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
+        private unsafe void DepthReader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
         {
             double time_elapsed = sw.Elapsed.TotalSeconds;
-            Console.WriteLine(time_elapsed);
+            if(time_elapsed > 3)
+            {
+                sw.Restart();
+            }
+           // Console.WriteLine(time_elapsed);
             using (var frame = e.FrameReference.AcquireFrame())
             {
                 if (frame == null)
                     return;
+   
                 var frameDescription = frame.FrameDescription;
                 var depthFrameData = new ushort[frameDescription.Width * frameDescription.Height];
                 var pixelData = new byte[frameDescription.Width * frameDescription.Height * 4];
@@ -185,6 +192,7 @@ namespace TomKinect
                 int mapDepthToByte = maxDepth / 256;
 
                 int interval = 10;
+                indexes = new ArrayList();
 
                 for (int i = 0; i < depthFrameData.Length; i++)
                 {
@@ -192,32 +200,46 @@ namespace TomKinect
                     int intensity = depth >= 0 && depth <= maxDepth ? (depth / mapDepthToByte) : 0;
 
                     int mask_count = 0;
-                    if (biFrameData.Length > i && biFrameData[i] != 0xff)
-                        mask_count += 1;
-                    if (biFrameData.Length > i + 1 && biFrameData[i + 1] != 0xff)
-                        mask_count += 1;
-                    if (biFrameData.Length > i + frameDescription.Width && biFrameData[i + frameDescription.Width] != 0xff)
-                        mask_count += 1;
-                    if (biFrameData.Length > i + frameDescription.Width + 1 && biFrameData[i + frameDescription.Width + 1] != 0xff)
-                        mask_count += 1;
+                    if(biFrameData.Length > i + frameDescription.Width + 1 && i > frameDescription.Width + 1)
+                    {
+                        if (biFrameData[i] != 0xff)
+                            mask_count += 1;
+                        if (biFrameData[i + 1] != 0xff)
+                            mask_count += 1;
+                        if (biFrameData[i - 1] != 0xff)
+                            mask_count += 1;
+                        if (biFrameData[i + frameDescription.Width] != 0xff)
+                            mask_count += 1;
+                        if (biFrameData[i + frameDescription.Width + 1] != 0xff)
+                            mask_count += 1;
+                        if (biFrameData[i + frameDescription.Width - 1] != 0xff)
+                            mask_count += 1;
+                        if (biFrameData[i - frameDescription.Width] != 0xff)
+                            mask_count += 1;
+                        if (biFrameData[i - frameDescription.Width + 1] != 0xff)
+                            mask_count += 1;
+                        if (biFrameData[i - frameDescription.Width - 1] != 0xff)
+                            mask_count += 1;
+                    }
+                       
 
                     int color = 0;
                     //Console.WriteLine(sw.Elapsed.TotalSeconds);
                     //Console.WriteLine("HERE");
-                    if (time_elapsed < 0.1)
-                    {
-                       color = 255;
-                    }
+                    //if (time_elapsed < 0.1)
+                    //{
+                    //   color = 255;
+                    //}
 
-                    if(biFrameData.Length > i && biFrameData[i] != 0xff)
+                    if(mask_count > 0 && mask_count < 9)
                     {
-                        if (depth > 2000)
+                        indexes.Add(i);
+                        if (true)
                         {
                             pixelData[pixelIndex++] = (byte)(color);
                             pixelData[pixelIndex++] = (byte)(0);
                             pixelData[pixelIndex++] = (byte)(0);
                             pixelData[pixelIndex++] = (byte)(255);
-                            sendPixelData[i] = (byte)(0);
                         }
                         else
                         {
@@ -225,7 +247,6 @@ namespace TomKinect
                             pixelData[pixelIndex++] = (byte)(intensity);
                             pixelData[pixelIndex++] = (byte)(intensity);
                             pixelData[pixelIndex++] = (byte)(255);
-                            sendPixelData[i] = (byte)(1);
                         }
                     } else
                     {
@@ -235,55 +256,63 @@ namespace TomKinect
                             pixelData[pixelIndex++] = (byte)(255);
 
                     }
+                    
 
                 }
 
-                //var pixels = new byte[]
-                //for(int i = 0; i < pixelData.Length; i++)
-                //{
+                var bitmap = BitmapImage.Create(frameDescription.Width, frameDescription.Height, 96d, 96d, PixelFormats.Bgr32, null, pixelData, 4 * frameDescription.Width);
+                WriteableBitmap bm = new WriteableBitmap(bitmap);
 
-                //}
-
-                /*var compressed = new List<byte>();
-                var state = 0; // statee
-                int counter = 0;
-                for(var i = 0; i < sendPixelData.Length; i++)
+                var ind = indexes.ToArray();
+                int newX;
+                int newY;
+                for(int i =0; i < indexes.Count; i+=30)
                 {
-                    var curVal = sendPixelData[i];
-                    if(state == curVal) 
+                    newX = (int)ind[i] % frameDescription.Width;
+                    newY = (int)((int)(ind[i]) / frameDescription.Width);
+                    if (time_elapsed > 0.2)
                     {
-                        counter++;
+                        bm.DrawLine(
+                            (int)ind[indexes.Count - i - 1] % frameDescription.Width,
+                            (int)((int)(ind[indexes.Count - i - 1]) / frameDescription.Width),
+                            newX,
+                            newY,
+                            Colors.Green);
                     }
                     else
                     {
-                        if(state == 0)
-                        {
-                            compressed.Add((byte)(-counter));
-                        } else
-                        {
-                            compressed.Add((byte)counter);
-                        }
-                        state = curVal;
-                        counter = 1;
+                        bm.DrawLine(
+                            newX < frameDescription.Width / 2 ? 0 : frameDescription.Width - 1,
+                           newY,
+                            newX,
+                            newY,
+                            Colors.Green);
                     }
                 }
+                int width = bm.PixelWidth;
+                int height = bm.PixelHeight;
+                int stride = bm.BackBufferStride;
+                int bytesPerPixel = (bm.Format.BitsPerPixel + 7) / 8;
 
-               UdpClient udpClient = new UdpClient("9.66.209.194", 33333);
-                try
+                bm.Lock();
+                byte* pBuff = (byte*)bm.BackBuffer;
+
+
+                for (int i = 0; i < depthFrameData.Length; i++)
                 {
-                    Console.WriteLine(sendPixelData.Length + "-----------");
-                    //udpClient.Send(sendPixelData, sendPixelData.Length);
-                    udpClient.Send(compressed.ToArray(), compressed.Count);
-                    //Byte[] sendBytes = Encoding.ASCII.GetBytes("HELLLLOOOOOO");
-                    //udpClient.Send(sendBytes, sendBytes.Length);
+                    if(biFrameData[i] == 0xff && time_elapsed > 0.2)
+                    {
+                        newX = (int)i % frameDescription.Width;
+                        newY = (int)((int)(i / frameDescription.Width));
+
+                        pBuff[4 * newX + (newY * stride)] = 0;
+                        pBuff[4 * newX + (newY * stride) + 1] = 0;
+                        pBuff[4 * newX + (newY * stride) + 2] = 0;
+                        pBuff[4 * newX + (newY * stride) + 3] = 255;
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                }*/
-
-                var bitmap = BitmapImage.Create(frameDescription.Width, frameDescription.Height, 96d, 96d, PixelFormats.Bgr32, null, pixelData, 4 * frameDescription.Width);
-                image.Source = bitmap;
+                bm.Unlock();
+                image.Source = bm;
             }
         }
     }
