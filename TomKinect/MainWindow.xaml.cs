@@ -223,13 +223,7 @@ namespace TomKinect
                     }
                        
 
-                    int color = 0;
-                    //Console.WriteLine(sw.Elapsed.TotalSeconds);
-                    //Console.WriteLine("HERE");
-                    //if (time_elapsed < 0.1)
-                    //{
-                    //   color = 255;
-                    //}
+                    int color = 75 + (int)((float)(i)/frameDescription.Width/frameDescription.Height*125);
 
                     if(mask_count > 0 && mask_count < 9)
                     {
@@ -237,7 +231,7 @@ namespace TomKinect
                         if (true)
                         {
                             pixelData[pixelIndex++] = (byte)(color);
-                            pixelData[pixelIndex++] = (byte)(0);
+                            pixelData[pixelIndex++] = (byte)(75);
                             pixelData[pixelIndex++] = (byte)(0);
                             pixelData[pixelIndex++] = (byte)(255);
                         }
@@ -251,7 +245,7 @@ namespace TomKinect
                     } else
                     {
                             pixelData[pixelIndex++] = (byte)(color);
-                            pixelData[pixelIndex++] = (byte)(0);
+                            pixelData[pixelIndex++] = (byte)(75);
                             pixelData[pixelIndex++] = (byte)(0);
                             pixelData[pixelIndex++] = (byte)(255);
 
@@ -266,29 +260,32 @@ namespace TomKinect
                 var ind = indexes.ToArray();
                 int newX;
                 int newY;
-                for(int i =0; i < indexes.Count; i+=30)
+                for(int i =0; i < indexes.Count; i+=25)
                 {
                     newX = (int)ind[i] % frameDescription.Width;
                     newY = (int)((int)(ind[i]) / frameDescription.Width);
                     if (time_elapsed > 0.2)
                     {
-                        bm.DrawLine(
+                        bm.DrawLineAa(
                             (int)ind[indexes.Count - i - 1] % frameDescription.Width,
                             (int)((int)(ind[indexes.Count - i - 1]) / frameDescription.Width),
                             newX,
                             newY,
-                            Colors.Green);
+                            Colors.DarkSeaGreen,
+                            1);
                     }
                     else
                     {
-                        bm.DrawLine(
+                        bm.DrawLineAa(
                             newX < frameDescription.Width / 2 ? 0 : frameDescription.Width - 1,
-                           newY,
+                            newY,
                             newX,
                             newY,
-                            Colors.Green);
+                            Colors.DarkSeaGreen,
+                            1);
                     }
                 }
+
                 int width = bm.PixelWidth;
                 int height = bm.PixelHeight;
                 int stride = bm.BackBufferStride;
@@ -300,7 +297,7 @@ namespace TomKinect
 
                 for (int i = 0; i < depthFrameData.Length; i++)
                 {
-                    if(biFrameData[i] == 0xff && time_elapsed > 0.2)
+                    if(false)//biFrameData[i] == 0xff && time_elapsed > 0.2) //lasers inside body
                     {
                         newX = (int)i % frameDescription.Width;
                         newY = (int)((int)(i / frameDescription.Width));
