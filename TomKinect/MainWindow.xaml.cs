@@ -20,6 +20,8 @@ using System.Net.Sockets;
 using WebSocketSharp;
 using System.Diagnostics;
 using System.Collections;
+using System.Speech.Recognition;
+using System.Speech.AudioFormat;
 
 namespace TomKinect
 {
@@ -32,25 +34,25 @@ namespace TomKinect
         byte[] biFrameData;
         ArrayList indexes;
         Stopwatch sw;
+        KinectAudioStream converted = null;
+        SpeechRecognitionEngine speechEngine = null;
+        IList<Body> bodies = null;
+        TextBox text = null;
+        CoordinateMapper cm = null;
              
         public MainWindow()
         {
             sensor = KinectSensor.GetDefault();
             InitializeComponent();
             var depthReader = sensor.DepthFrameSource.OpenReader();
-            //var colorReader = sensor.ColorFrameSource.OpenReader();
-            //var bodyReader = sensor.BodyFrameSource.OpenReader();
+            var colorReader = sensor.ColorFrameSource.OpenReader();
+            var bodyReader = sensor.BodyFrameSource.OpenReader();
             var biReader = sensor.BodyIndexFrameSource.OpenReader();
 
-
-            //var multiSourceFrameReader = sensor.OpenMultiSourceFrameReader(FrameSourceTypes.Depth | FrameSourceTypes.BodyIndex);
-
-            //multiSourceFrameReader.MultiSourceFrameArrived += Reader_MultiSourceFrameArrived;
-
-            depthReader.FrameArrived += DepthReader_FrameArrived;
+            //depthReader.FrameArrived += DepthReader_FrameArrived;
             biReader.FrameArrived += BiReader_FrameArrived;
-            //colorReader.FrameArrived += ColorReader_FrameArrived;
-            //bodyReader.FrameArrived += BodyReader_FrameArrived;
+            colorReader.FrameArrived += ColorReader_FrameArrived;
+            bodyReader.FrameArrived += BodyReader_FrameArrived;
 
             try
             {
@@ -66,11 +68,84 @@ namespace TomKinect
                 Console.WriteLine(e);
             }
 
+            var beams = sensor.AudioSource.AudioBeams[0];
+            var stream = beams.OpenInputStream();
+            converted = new KinectAudioStream(stream);
+
+            IEnumerable<RecognizerInfo> recognizers = SpeechRecognitionEngine.InstalledRecognizers();
+            RecognizerInfo kRecognizer = null;
+            foreach(RecognizerInfo recognizer in recognizers)
+            {
+                string value;
+                recognizer.AdditionalInfo.TryGetValue("Kinect", out value);
+                if("en-US".Equals(recognizer.Culture.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    kRecognizer = recognizer;
+                }
+            }
+
+            speechEngine = new SpeechRecognitionEngine(kRecognizer.Id);
+            var gb = new GrammarBuilder {  Culture = kRecognizer.Culture };
+
+            Choices colors = new Choices();
+            colors.Add(new string[] { "red", "green", "blue" });
+            gb.Append(colors);
+
+
+
+            var g = new DictationGrammar();
+
+            speechEngine.LoadGrammar(g);
+            speechEngine.SpeechRecognized += SpeechEngine_SpeechRecognized;
+            speechEngine.SpeechHypothesized += SpeechEngine_SpeechHypothesized;
+            converted.SpeechActive = true;
+
+            try
+            {
+                speechEngine.SetInputToAudioStream(converted, new SpeechAudioFormatInfo(EncodingFormat.Pcm, 16000, 16, 1, 32000, 2, null));
+                speechEngine.RecognizeAsync(RecognizeMode.Multiple);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+
+            bodies = new Body[sensor.BodyFrameSource.BodyCount];
+            cm = sensor.CoordinateMapper;
+
+            text = new TextBox()
+            {
+                Visibility = Visibility.Visible,
+                FontSize = 20.0,
+            };
+            text.Width = 500;
+            text.Height = 50;
+            canvas.Children.Add(text);
 
             sw = new Stopwatch();
             sw.Restart();
 
             sensor.Open();
+        }
+
+        private void SpeechEngine_SpeechHypothesized(object sender, SpeechHypothesizedEventArgs e)
+        {
+            if (e.Result != null && e.Result.Text != null)
+            {
+                //Console.WriteLine(e.Result.Text);
+                text.Text = e.Result.Text;
+            }
+            converted.SpeechActive = true;
+        }
+
+        private void SpeechEngine_SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
+        {
+            if (e.Result != null && e.Result.Text != null)
+            {
+                //Console.WriteLine(e.Result.Text);
+                //text.Text = e.Result.Text;
+            }
+            converted.SpeechActive = true;
         }
 
         private void Ws_OnMessage(object sender, MessageEventArgs e)
@@ -95,75 +170,43 @@ namespace TomKinect
             }
         }
 
-        private void Reader_MultiSourceFrameArrived(object sender, MultiSourceFrameArrivedEventArgs e)
-        {
-            Console.WriteLine("HERE!!!");
-            MultiSourceFrame msFrame = e.FrameReference.AcquireFrame();
-            if (msFrame == null)
-            {
-                return;
-            }
-
-
-            var df = msFrame.DepthFrameReference.AcquireFrame();
-            var biframe = msFrame.BodyIndexFrameReference.AcquireFrame();
-
-
-            if (df == null || biframe == null)
-                return;
-
-
-            var frameDescription = df.FrameDescription;
-
-            var depthFrameData = new ushort[frameDescription.Width * frameDescription.Height];
-            var biFrameData = new byte[frameDescription.Width * frameDescription.Height];
-            var pixelData = new byte[frameDescription.Width * frameDescription.Height * 4];
-
-            df.CopyFrameDataToArray(depthFrameData);
-            biframe.CopyFrameDataToArray(biFrameData);
-
-
-            int pixelIndex = 0;
-
-            for (int i = 0; i < depthFrameData.Length; i++)
-            {
-                var depth = depthFrameData[i];
-
-                int intensity = depth / 2000;
-
-                if (biFrameData[i] != 0xff)
-                {
-                    //Console.WriteLine("STUFF!");
-                    pixelData[pixelIndex++] = (byte)(intensity);
-                    pixelData[pixelIndex++] = (byte)(intensity);
-                    pixelData[pixelIndex++] = (byte)(intensity);
-                    pixelData[pixelIndex++] = (byte)(255);
-                }
-                else
-                {
-                    pixelData[pixelIndex++] = (byte)(0);
-                    pixelData[pixelIndex++] = (byte)(0);
-                    pixelData[pixelIndex++] = (byte)(0);
-                    pixelData[pixelIndex++] = (byte)(255);
-                }
-
-            }
-
-            var bitmap = BitmapImage.Create(frameDescription.Width, frameDescription.Height, 96d, 96d, PixelFormats.Bgr32, null, pixelData, 4 * frameDescription.Width);
-            image.Source = bitmap;
-        }
-
         private void BodyReader_FrameArrived(object sender, BodyFrameArrivedEventArgs e)
         {
             using (var frame = e.FrameReference.AcquireFrame())
             {
+                if (frame != null)
+                {
+                    frame.GetAndRefreshBodyData(bodies);
+                    for (int i = 0; i < bodies.Count; i++)
+                    {
+                        Body body = bodies[i];
+                        if (body != null && body.IsTracked)
+                        {
+                            var head = body.Joints[JointType.Head].Position;
+                            var pos = cm.MapCameraPointToColorSpace(head);
+                            //Console.WriteLine(pos.Y);
+                            Canvas.SetLeft(text, pos.X - 90);
+                            Canvas.SetTop(text, pos.Y - 180);
+                        }
+                    }
+                }
             }
-            //throw new NotImplementedException();
         }
 
         private void ColorReader_FrameArrived(object sender, ColorFrameArrivedEventArgs e)
         {
-            //throw new NotImplementedException();
+            using(var frame = e.FrameReference.AcquireFrame())
+            {
+                if (frame != null)
+                {
+                    var frameDescription = frame.FrameDescription;
+                    var colorFrameData = new byte[frameDescription.Width * frameDescription.Height * 4];
+                    frame.CopyConvertedFrameDataToArray(colorFrameData, ColorImageFormat.Bgra);
+
+                    var bitmap = BitmapImage.Create(frameDescription.Width, frameDescription.Height, 96d, 96d, PixelFormats.Bgr32, null, colorFrameData, 4 * frameDescription.Width);
+                    image.Source = bitmap;
+                }
+            }
         }
 
         private unsafe void DepthReader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
@@ -271,7 +314,7 @@ namespace TomKinect
                             (int)((int)(ind[indexes.Count - i - 1]) / frameDescription.Width),
                             newX,
                             newY,
-                            Colors.DarkSeaGreen,
+                            Colors.Cyan,
                             1);
                     }
                     else
@@ -281,7 +324,7 @@ namespace TomKinect
                             newY,
                             newX,
                             newY,
-                            Colors.DarkSeaGreen,
+                            Colors.Cyan,
                             1);
                     }
                 }
