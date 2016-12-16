@@ -39,7 +39,8 @@ namespace TomKinect
         IList<Body> bodies = null;
         TextBox text = null;
         CoordinateMapper cm = null;
-             
+        bool caroline = false;
+
         public MainWindow()
         {
             sensor = KinectSensor.GetDefault();
@@ -49,10 +50,20 @@ namespace TomKinect
             var bodyReader = sensor.BodyFrameSource.OpenReader();
             var biReader = sensor.BodyIndexFrameSource.OpenReader();
 
-            //depthReader.FrameArrived += DepthReader_FrameArrived;
             biReader.FrameArrived += BiReader_FrameArrived;
-            colorReader.FrameArrived += ColorReader_FrameArrived;
-            bodyReader.FrameArrived += BodyReader_FrameArrived;
+
+            if (caroline)
+            {
+                colorReader.FrameArrived += ColorReader_FrameArrived;
+                bodyReader.FrameArrived += BodyReader_FrameArrived;
+            }
+            else
+            {
+                depthReader.FrameArrived += DepthReader_FrameArrived;
+            }
+            //depthReader.FrameArrived += DepthReader_FrameArrived;
+            //colorReader.FrameArrived += ColorReader_FrameArrived;
+            //bodyReader.FrameArrived += BodyReader_FrameArrived;
 
             try
             {
@@ -96,8 +107,11 @@ namespace TomKinect
             var g = new DictationGrammar();
 
             speechEngine.LoadGrammar(g);
-            speechEngine.SpeechRecognized += SpeechEngine_SpeechRecognized;
-            speechEngine.SpeechHypothesized += SpeechEngine_SpeechHypothesized;
+            if(caroline)
+            {
+                speechEngine.SpeechRecognized += SpeechEngine_SpeechRecognized;
+                speechEngine.SpeechHypothesized += SpeechEngine_SpeechHypothesized;
+            }
             converted.SpeechActive = true;
 
             try
@@ -112,15 +126,18 @@ namespace TomKinect
 
             bodies = new Body[sensor.BodyFrameSource.BodyCount];
             cm = sensor.CoordinateMapper;
-
-            text = new TextBox()
+            if (caroline)
             {
-                Visibility = Visibility.Visible,
-                FontSize = 20.0,
-            };
-            text.Width = 500;
-            text.Height = 50;
-            canvas.Children.Add(text);
+                text = new TextBox()
+                {
+                    Visibility = Visibility.Visible,
+                    FontSize = 20.0,
+                };
+                text.Width = 500;
+                text.Height = 50;
+                canvas.Children.Add(text);
+            }
+            
 
             sw = new Stopwatch();
             sw.Restart();
